@@ -1,6 +1,6 @@
 # Use a imagem oficial do Playwright da Microsoft
 # Ela já vem com o Node.js e todos os navegadores/dependências instalados
-FROM mcr.microsoft.com/playwright:v1.49.0-jammy
+FROM mcr.microsoft.com/playwright:v1.57.0-jammy
 
 # Define o diretório de trabalho
 WORKDIR /app
