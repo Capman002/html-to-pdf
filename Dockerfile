@@ -15,6 +15,9 @@ RUN npm install
 # Copia o restante do código fonte
 COPY . .
 
+# Build do Frontend (Vite)
+RUN npm run build
+
 # Expõe a porta que o Node.js vai usar
 EXPOSE 3000
 EXPOSE 5173
