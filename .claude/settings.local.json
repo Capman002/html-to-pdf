@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(findstr:*)",
+      "Bash(node:*)",
+      "Bash(timeout:*)",
+      "Bash(ping:*)",
+      "Bash(powershell -Command:*)",
+      "Bash(netstat:*)",
+      "Bash(taskkill:*)",
+      "Bash(cmd /c \"taskkill /PID 13168 /F\")",
+      "Bash(cmd /c \"taskkill /PID 13168 /F 2>nul & exit /b 0\")",
+      "Bash(powershell \"Stop-Process -Id 13168 -Force\")",
+      "Bash(powershell:*)"
+    ]
+  }
+}

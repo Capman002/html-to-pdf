@@ -29,9 +29,31 @@ const app = new Elysia()
         return { error: "HTML content is required" };
       }
 
+      // Inject PDF-safe CSS overrides into the HTML
+      const pdfOverrides = `<style id="pdf-engine-overrides">
+        @page { margin: 0 !important; }
+        h1, h2, h3, h4, h5, h6 {
+          break-after: avoid !important;
+          page-break-after: avoid !important;
+        }
+        pre, table, figure, blockquote {
+          break-inside: avoid !important;
+          page-break-inside: avoid !important;
+        }
+      </style>`;
+
+      let processedHtml = html;
+      if (processedHtml.includes("</head>")) {
+        processedHtml = processedHtml.replace("</head>", pdfOverrides + "</head>");
+      } else if (processedHtml.includes("<body")) {
+        processedHtml = processedHtml.replace("<body", pdfOverrides + "<body");
+      } else {
+        processedHtml = pdfOverrides + processedHtml;
+      }
+
       // Log content summary
       console.log(
-        `[Server] Generating PDF for content length: ${html.length} chars`,
+        `[Server] Generating PDF for content length: ${processedHtml.length} chars`,
       );
 
       let browser;
@@ -40,22 +62,51 @@ const app = new Elysia()
         const startTime = Date.now();
 
         browser = await chromium.launch({
-          headless: true, // Explicitly set headless
-          args: ["--no-sandbox"], // Safer for some environments (Docker/Windows quirks)
+          headless: true,
+          args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-gpu"],
         });
 
-        const context = await browser.newContext();
+        const context = await browser.newContext({
+          deviceScaleFactor: 2,
+          viewport: { width: 794, height: 1123 },
+        });
         const page = await context.newPage();
 
         console.log("[Server] Setting content...");
-        // Use domcontentloaded for speed, networkidle can be flaky with external fonts/scripts
-        await page.setContent(html, {
-          waitUntil: "domcontentloaded",
+        await page.setContent(processedHtml, {
+          waitUntil: "networkidle",
           timeout: 30000,
         });
 
-        // Optional: fast check for fonts or styles if needed
-        // await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => console.log('Network idle timeout skipped'));
+        // Wait for all fonts to load (Google Fonts, Adobe, etc.)
+        await page.evaluate(() => document.fonts.ready);
+
+        // Wait for images
+        await page.evaluate(() => {
+          return Promise.all(
+            Array.from(document.images)
+              .filter((img) => !img.complete)
+              .map(
+                (img) =>
+                  new Promise((resolve) => {
+                    img.onload = img.onerror = resolve;
+                  }),
+              ),
+          );
+        });
+
+        // Switch to print media to detect @media print styles, then neutralize position:fixed
+        await page.emulateMedia({ media: "print" });
+        await page.evaluate(() => {
+          document.querySelectorAll("*").forEach((el) => {
+            if (window.getComputedStyle(el).position === "fixed") {
+              el.style.setProperty("position", "relative", "important");
+            }
+          });
+        });
+
+        // Buffer for complex CSS rendering
+        await page.waitForTimeout(500);
 
         console.log("[Server] Printing PDF...");
         const pdfBuffer = await page.pdf({

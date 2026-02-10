@@ -120,6 +120,27 @@ const server = http.createServer(async (req, res) => {
           return;
         }
 
+        // Inject PDF-safe CSS overrides into the HTML
+        const pdfOverrides = `<style id="pdf-engine-overrides">
+          @page { margin: 0 !important; }
+          h1, h2, h3, h4, h5, h6 {
+            break-after: avoid !important;
+            page-break-after: avoid !important;
+          }
+          pre, table, figure, blockquote {
+            break-inside: avoid !important;
+            page-break-inside: avoid !important;
+          }
+        </style>`;
+
+        if (html.includes("</head>")) {
+          html = html.replace("</head>", pdfOverrides + "</head>");
+        } else if (html.includes("<body")) {
+          html = html.replace("<body", pdfOverrides + "<body");
+        } else {
+          html = pdfOverrides + html;
+        }
+
         console.log(
           `[Node Server] Launching Chromium (Content: ${html.length} chars) with Scale: ${scale}...`,
         );
@@ -136,21 +157,45 @@ const server = http.createServer(async (req, res) => {
         });
         const page = await context.newPage();
 
+        // 1. Load HTML and wait for ALL external resources (fonts, CSS, images)
         await page.setContent(html, {
-          waitUntil: "load",
+          waitUntil: "networkidle",
           timeout: 30000,
         });
 
-        // Wait for all fonts to load (Google Fonts, etc.)
+        // 2. Explicitly wait for fonts API (Google Fonts, Adobe, etc.)
         await page.evaluate(() => document.fonts.ready);
 
-        // Small extra wait for complex CSS rendering (grids, animations, etc.)
+        // 3. Wait for images and any lazy-loaded content
+        await page.evaluate(() => {
+          return Promise.all(
+            Array.from(document.images)
+              .filter((img) => !img.complete)
+              .map(
+                (img) =>
+                  new Promise((resolve) => {
+                    img.onload = img.onerror = resolve;
+                  }),
+              ),
+          );
+        });
+
+        // 4. Switch to print media to detect @media print styles, then neutralize position:fixed
+        await page.emulateMedia({ media: "print" });
+        await page.evaluate(() => {
+          document.querySelectorAll("*").forEach((el) => {
+            if (window.getComputedStyle(el).position === "fixed") {
+              el.style.setProperty("position", "relative", "important");
+            }
+          });
+        });
+
+        // 5. Small buffer for complex CSS rendering (grids, pseudo-elements, animations)
         await page.waitForTimeout(500);
 
         const pdfBuffer = await page.pdf({
           format: "A4",
           printBackground: true,
-          preferCSSPageSize: true,
           margin: { top: "0", right: "0", bottom: "0", left: "0" },
         });
 
