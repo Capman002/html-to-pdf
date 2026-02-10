@@ -13,6 +13,10 @@
     "vite": "^7.2.4"
   },
   "dependencies": {
+    "@elysiajs/cors": "^1.4.1",
+    "@elysiajs/static": "^1.4.7",
+    "@sinclair/typebox": "^0.34.48",
+    "elysia": "^1.4.23",
     "playwright": "1.50.0"
   }
 }
