@@ -132,17 +132,25 @@ const server = http.createServer(async (req, res) => {
 
         const context = await browser.newContext({
           deviceScaleFactor: scale,
+          viewport: { width: 794, height: 1123 },
         });
         const page = await context.newPage();
 
         await page.setContent(html, {
-          waitUntil: "domcontentloaded",
+          waitUntil: "load",
           timeout: 30000,
         });
+
+        // Wait for all fonts to load (Google Fonts, etc.)
+        await page.evaluate(() => document.fonts.ready);
+
+        // Small extra wait for complex CSS rendering (grids, animations, etc.)
+        await page.waitForTimeout(500);
 
         const pdfBuffer = await page.pdf({
           format: "A4",
           printBackground: true,
+          preferCSSPageSize: true,
           margin: { top: "0", right: "0", bottom: "0", left: "0" },
         });
 
